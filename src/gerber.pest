@@ -1,7 +1,7 @@
 // gerber.pest
 // Pest grammar for Gerber format based on Gerber_2022.02 spec
 
-WHITESPACE = _{ "\n" }
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
 // Main structure
 gerber_file = { SOI ~ statement* ~ m02 ~ EOI }
@@ -192,7 +192,7 @@ decimal = @{
     )
 }
 
-aperture_identifier = @{ "D" ~ "0"* ~ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ }
+aperture_identifier = @{ "D" ~ "0"* ~ '1'..'9' ~ ASCII_DIGIT* }
 
 name = @{ ("." | "_" | ASCII_ALPHA | "$") ~ ("." | "_" | ASCII_ALPHANUMERIC)* }
 user_name = @{ ("_" | ASCII_ALPHA | "$") ~ ("." | "_" | ASCII_ALPHANUMERIC)* } // Cannot start with a dot
