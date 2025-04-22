@@ -1,0 +1,200 @@
+// gerber.pest
+// Pest grammar for Gerber format based on Gerber_2022.02 spec
+
+WHITESPACE = _{ "\n" }
+
+// Main structure
+gerber_file = { SOI ~ statement* ~ m02 ~ EOI }
+
+statement = _{
+    g04 |
+    mo |
+    fs |
+    ad |
+    am |
+    dnn |
+    g75 |
+    g01 |
+    g02 |
+    g03 |
+    d01 |
+    d02 |
+    d03 |
+    lp |
+    lm |
+    lr |
+    ls |
+    region_statement |
+    ab_statement |
+    sr_statement |
+    tf |
+    ta |
+    to |
+    td
+}
+
+// Graphics commands
+g04 = { "G04" ~ string ~ "*" }
+
+mo = { "%MO" ~ ("MM" | "IN") ~ "*%" }
+fs = { "%FS" ~ "LA" ~ "X" ~ coordinate_digits ~ "Y" ~ coordinate_digits ~ "*%" }
+coordinate_digits = { '0'..'6' ~ '0'..'6' }
+
+g01 = { "G01*" }
+g02 = { "G02*" }
+g03 = { "G03*" }
+g75 = { "G75*" }
+
+ad = { "%AD" ~
+    aperture_identifier ~
+    (
+        ("C" ~ "," ~ decimal ~ ("X" ~ decimal)?) |
+        ("R" ~ "," ~ decimal ~ "X" ~ decimal ~ ("X" ~ decimal)?) |
+        ("O" ~ "," ~ decimal ~ "X" ~ decimal ~ ("X" ~ decimal)?) |
+        ("P" ~ "," ~ decimal ~ "X" ~ decimal ~ ("X" ~ decimal ~ ("X" ~ decimal)?)?) |
+        (name ~ ("," ~ decimal ~ ("X" ~ decimal)*)?)
+    ) ~
+    "*%"
+}
+
+am = { "%AM" ~ name ~ "*" ~ macro_body ~ "%" }
+macro_body = { (primitive | variable_definition)+ }
+variable_definition = { macro_variable ~ "=" ~ expr ~ "*" }
+primitive = {
+    ("0" ~ string ~ "*") |
+    ("1" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ ("," ~ expr)? ~ "*") |
+    ("20" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "*") |
+    ("21" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "*") |
+    ("4" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ ("," ~ expr ~ "," ~ expr)+ ~ "," ~ expr ~ "*") |
+    ("5" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "*") |
+    ("7" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "*")
+}
+
+macro_variable = @{ "$" ~ ASCII_DIGIT* ~ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
+expr = { term ~ (("+" | "-") ~ term)* }
+term = { factor ~ (("x" | "/") ~ factor)* }
+factor = {
+    "(" ~ expr ~ ")" |
+    macro_variable |
+    unsigned_decimal
+}
+
+dnn = { aperture_identifier ~ "*" }
+
+d01 = { ("X" ~ integer)? ~ ("Y" ~ integer)? ~ ("I" ~ integer ~ "J" ~ integer)? ~ "D01*" }
+d02 = { ("X" ~ integer)? ~ ("Y" ~ integer)? ~ "D02*" }
+d03 = { ("X" ~ integer)? ~ ("Y" ~ integer)? ~ "D03*" }
+
+lp = { "%LP" ~ ("C" | "D") ~ "*%" }
+lm = { "%LM" ~ ("N" | "XY" | "Y" | "X") ~ "*%" }
+lr = { "%LR" ~ decimal ~ "*%" }
+ls = { "%LS" ~ decimal ~ "*%" }
+
+m02 = { "M02*" }
+
+region_statement = { g36 ~ contour+ ~ g37 }
+contour = { d02 ~ (d01 | g01 | g02 | g03)* }
+g36 = { "G36*" }
+g37 = { "G37*" }
+
+ab_statement = { ab_open ~ block ~ ab_close }
+ab_open = { "%AB" ~ aperture_identifier ~ "*%" }
+ab_close = { "%AB" ~ "*%" }
+
+sr_statement = { sr_open ~ block ~ sr_close }
+sr_open = { "%SR" ~ "X" ~ positive_integer ~ "Y" ~ positive_integer ~ "I" ~ decimal ~ "J" ~ decimal ~ "*%" }
+sr_close = { "%SR" ~ "*%" }
+
+block = {
+    (
+        g04 |
+        mo |
+        fs |
+        ad |
+        am |
+        dnn |
+        d01 |
+        d02 |
+        d03 |
+        g01 |
+        g02 |
+        g03 |
+        g75 |
+        lp |
+        lm |
+        lr |
+        ls |
+        region_statement |
+        ab_statement |
+        tf |
+        ta |
+        to |
+        td
+    )*
+}
+
+// Attribute commands
+tf = { "%TF" ~ file_attribute_name ~ ("," ~ field)* ~ "*%" }
+ta = { "%TA" ~ aperture_attribute_name ~ ("," ~ field)* ~ "*%" }
+to = { "%TO" ~ object_attribute_name ~ ("," ~ field)* ~ "*%" }
+td = { "%TD" ~ (file_attribute_name | aperture_attribute_name | object_attribute_name | user_name)? ~ "*%" }
+
+file_attribute_name = {
+    ".Part" |
+    ".FileFunction" |
+    ".FilePolarity" |
+    ".SameCoordinates" |
+    ".CreationDate" |
+    ".GenerationSoftware" |
+    ".ProjectId" |
+    ".MD5" |
+    user_name
+}
+
+aperture_attribute_name = {
+    ".AperFunction" |
+    ".DrillTolerance" |
+    ".FlashText" |
+    user_name
+}
+
+object_attribute_name = {
+    ".N" |
+    ".P" |
+    ".C" ~ &"," | // To avoid this rule also parses .CRot etc
+    ".CRot" |
+    ".CMfr" |
+    ".CMPN" |
+    ".CVal" |
+    ".CMnt" |
+    ".CFtp" |
+    ".CPgN" |
+    ".CPgD" |
+    ".CHgt" |
+    ".CLbN" |
+    ".CLbD" |
+    ".CSup" |
+    user_name
+}
+
+// Tokens, by regex
+unsigned_integer = @{ ASCII_DIGIT+ }
+positive_integer = @{ ASCII_DIGIT* ~ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
+integer = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
+unsigned_decimal = @{
+    (ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)?) |
+    ("." ~ ASCII_DIGIT+)
+}
+decimal = @{
+    ("+" | "-")? ~ (
+        (ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)?) |
+        ("." ~ ASCII_DIGIT+)
+    )
+}
+
+aperture_identifier = @{ "D" ~ "0"* ~ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ }
+
+name = @{ ("." | "_" | ASCII_ALPHA | "$") ~ ("." | "_" | ASCII_ALPHANUMERIC)* }
+user_name = @{ ("_" | ASCII_ALPHA | "$") ~ ("." | "_" | ASCII_ALPHANUMERIC)* } // Cannot start with a dot
+string = @{ (!("*" | "%") ~ ANY)* } // All characters except * %
+field = @{ (!("*" | "%" | ",") ~ ANY)* } // All characters except * % ,
