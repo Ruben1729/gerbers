@@ -3,13 +3,12 @@ pub mod command;
 
 use std::fs;
 use std::path::Path;
-use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
 /// Re-export commonly used types for convenience
 pub use command::Command;
 use crate::command::{ApertureDefinition, ApertureTemplate, D01Operation, D02Operation, D03Operation, FormatSpecification, Mirroring, Polarity};
-use crate::Command::{D01, D02, D03, G04, LM, LP};
+use crate::error::GerberError;
 
 #[derive(Parser)]
 #[grammar = "gerber.pest"]
@@ -42,37 +41,45 @@ impl Gerber {
                     Rule::g04 => {
                         let mut arguments = pair.clone().into_inner();
 
-                        if let Some(comment) = arguments.next() {
-                            commands.push(G04(comment.as_span().as_str().to_string()));
-                        } else {
-                            panic!("No comment was detected for G04.");
+                        let comment = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "No comment was detected for G04.".to_string()
+                            ))?;
+
+                        if arguments.next().is_some() {
+                            return Err(GerberError::SemanticError(
+                                "Unexpected additional arguments for G04 command.".to_string()
+                            ).into());
                         }
 
-                        if !arguments.next().is_none() {
-                            panic!("Unable to parse properly.")
-                        }
+                        commands.push(Command::G04(comment.as_span().as_str().to_string()));
                     },
                     Rule::mo => {
                         let mut arguments = pair.clone().into_inner();
 
-                        if let Some(units) = arguments.next() {
-                            let unit_str = units.as_span().as_str();
-                            let unit = match unit_str.to_uppercase().as_str() {
-                                "MM" => command::Unit::Millimeters,
-                                "IN" => command::Unit::Inches,
-                                _ => {
-                                    panic!("Unrecognized unit: {}", unit_str);
-                                }
-                            };
+                        let units = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "No unit was specified for MO command.".to_string()
+                            ))?;
 
-                            commands.push(Command::MO(unit));
-                        } else {
-                            panic!("No comment was detected for G04.");
+                        let unit_str = units.as_span().as_str();
+                        let unit = match unit_str.to_uppercase().as_str() {
+                            "MM" => command::Unit::Millimeters,
+                            "IN" => command::Unit::Inches,
+                            _ => {
+                                return Err(GerberError::SemanticError(
+                                    format!("Unrecognized unit: {}", unit_str)
+                                ).into());
+                            }
+                        };
+
+                        if arguments.next().is_some() {
+                            return Err(GerberError::SemanticError(
+                                "Unexpected additional arguments for MO command.".to_string()
+                            ).into());
                         }
 
-                        if !arguments.next().is_none() {
-                            panic!("Unable to parse properly.")
-                        }
+                        commands.push(Command::MO(unit));
                     },
                     Rule::fs => {
                         let mut arguments = pair.clone().into_inner();
@@ -83,33 +90,53 @@ impl Gerber {
                             y_decimal_digits: 0,
                         };
 
-                        if let Some(x_int_digits) =  arguments.next() {
-                            format_spec.x_integer_digits = x_int_digits.as_span().as_str().parse().expect("Integer digits could not be parsed");
-                        } else {
-                            panic!("No comment was detected for G04.");
+                        // X integer digits
+                        let x_int_digits = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "Missing X integer digits in FS command.".to_string()
+                            ))?;
+                        format_spec.x_integer_digits = x_int_digits.as_span().as_str().parse()
+                            .map_err(|_| GerberError::SemanticError(
+                                "X integer digits could not be parsed as a number.".to_string()
+                            ))?;
+
+                        // X decimal digits
+                        let x_dec_digits = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "Missing X decimal digits in FS command.".to_string()
+                            ))?;
+                        format_spec.x_decimal_digits = x_dec_digits.as_span().as_str().parse()
+                            .map_err(|_| GerberError::SemanticError(
+                                "X decimal digits could not be parsed as a number.".to_string()
+                            ))?;
+
+                        // Y integer digits
+                        let y_int_digits = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "Missing Y integer digits in FS command.".to_string()
+                            ))?;
+                        format_spec.y_integer_digits = y_int_digits.as_span().as_str().parse()
+                            .map_err(|_| GerberError::SemanticError(
+                                "Y integer digits could not be parsed as a number.".to_string()
+                            ))?;
+
+                        // Y decimal digits
+                        let y_dec_digits = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "Missing Y decimal digits in FS command.".to_string()
+                            ))?;
+                        format_spec.y_decimal_digits = y_dec_digits.as_span().as_str().parse()
+                            .map_err(|_| GerberError::SemanticError(
+                                "Y decimal digits could not be parsed as a number.".to_string()
+                            ))?;
+
+                        // Check for unexpected arguments
+                        if arguments.next().is_some() {
+                            return Err(GerberError::SemanticError(
+                                "Unexpected additional arguments for FS command.".to_string()
+                            ).into());
                         }
 
-                        if let Some(x_dec_digits) =  arguments.next() {
-                            format_spec.x_decimal_digits = x_dec_digits.as_span().as_str().parse().expect("Integer digits could not be parsed");
-                        } else {
-                            panic!("No comment was detected for G04.");
-                        }
-
-                        if let Some(y_int_digits) = arguments.next() {
-                            format_spec.y_integer_digits = y_int_digits.as_span().as_str().parse().expect("Integer digits could not be parsed");
-                        } else {
-                            panic!("No comment was detected for G04.");
-                        }
-
-                        if let Some(y_dec_digits) =  arguments.next() {
-                            format_spec.y_decimal_digits = y_dec_digits.as_span().as_str().parse().expect("Integer digits could not be parsed");
-                        } else {
-                            panic!("No comment was detected for G04.");
-                        }
-
-                        if !arguments.next().is_none() {
-                            panic!("Unable to parse properly.")
-                        }
                         commands.push(Command::FS(format_spec));
                     },
                     Rule::ad => {
@@ -120,40 +147,71 @@ impl Gerber {
 
                         let mut arguments = pair.clone().into_inner();
 
-                        if let Some(pair) = arguments.next() {
-                            let ap_str = pair.as_span().as_str();
-                            aperture_definition.code = ap_str.trim_start_matches('D').parse::<u32>().expect("Expected an integer.");
-                        }
+                        // Parse aperture code (D-code)
+                        let ap_pair = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "Missing aperture code in AD command.".to_string()
+                            ))?;
 
-                        if let Some(pair) = arguments.next() {
-                            let pair_str = format!("{:?}", pair.as_rule());
+                        let ap_str = ap_pair.as_span().as_str();
+                        aperture_definition.code = ap_str.trim_start_matches('D').parse::<u32>()
+                            .map_err(|_| GerberError::SemanticError(
+                                format!("Aperture code '{}' could not be parsed as an integer.", ap_str)
+                            ))?;
+
+                        // Parse template
+                        if let Some(template_pair) = arguments.next() {
+                            let pair_str = format!("{:?}", template_pair.as_rule());
                             if pair_str == "template_circle" {
                                 let mut diameter = 0.0;
                                 let mut optional_hole: Option<f64> = None;
-                                let mut circle_arguments = pair.clone().into_inner();
+                                let mut circle_arguments = template_pair.clone().into_inner();
+
+                                // Parse diameter
                                 if let Some(diameter_pair) = circle_arguments.next() {
-                                    diameter = diameter_pair.as_span().as_str().parse().expect("Expected an double.");
+                                    diameter = diameter_pair.as_span().as_str().parse()
+                                        .map_err(|_| GerberError::SemanticError(
+                                            "Circle diameter could not be parsed as a number.".to_string()
+                                        ))?;
                                 }
 
+                                // Parse optional hole
                                 if let Some(option_pair) = circle_arguments.next() {
-                                    optional_hole =  Some(option_pair.as_span().as_str().parse().expect("Expected an double."));
+                                    optional_hole = Some(option_pair.as_span().as_str().parse()
+                                        .map_err(|_| GerberError::SemanticError(
+                                            "Circle hole diameter could not be parsed as a number.".to_string()
+                                        ))?);
                                 }
 
                                 aperture_definition.template = ApertureTemplate::Circle(diameter, optional_hole);
+                            } else {
+                                return Err(GerberError::SemanticError(
+                                    format!("Unsupported aperture template: {}", pair_str)
+                                ).into());
                             }
+                        } else {
+                            return Err(GerberError::SemanticError(
+                                "Missing aperture template in AD command.".to_string()
+                            ).into());
                         }
 
                         commands.push(Command::AD(aperture_definition));
                     },
                     Rule::am => {},
                     Rule::dnn => {
-                        let mut aperture_command= 0;
                         let mut arguments = pair.clone().into_inner();
 
-                        if let Some(pair) = arguments.next() {
-                            let ap_str = pair.as_span().as_str();
-                            aperture_command = ap_str.trim_start_matches('D').parse::<u32>().expect("Expected an integer.");
-                        }
+                        // Parse aperture select code
+                        let ap_pair = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "Missing aperture code in Dnn command.".to_string()
+                            ))?;
+
+                        let ap_str = ap_pair.as_span().as_str();
+                        let aperture_command = ap_str.trim_start_matches('D').parse::<u32>()
+                            .map_err(|_| GerberError::SemanticError(
+                                format!("Aperture code '{}' could not be parsed as an integer.", ap_str)
+                            ))?;
 
                         commands.push(Command::Dnn(aperture_command));
                     },
@@ -183,17 +241,27 @@ impl Gerber {
                             let mut coord_args = new_pair.clone().into_inner();
 
                             if let Some(coord_pair) = coord_args.next() {
+                                let coord_str = coord_pair.as_span().as_str();
+
                                 if pair_str == "x_coord" {
-                                    op.x = Some(coord_pair.as_span().as_str().parse().expect("Expected an integer."));
+                                    op.x = Some(coord_str.parse()
+                                        .map_err(|_| GerberError::SemanticError(
+                                            format!("X coordinate '{}' could not be parsed as a number.", coord_str)
+                                        ))?);
                                 } else if pair_str == "y_coord" {
-                                    op.y = Some(coord_pair.as_span().as_str().parse().expect("Expected an integer."));
+                                    op.y = Some(coord_str.parse()
+                                        .map_err(|_| GerberError::SemanticError(
+                                            format!("Y coordinate '{}' could not be parsed as a number.", coord_str)
+                                        ))?);
                                 } else if pair_str == "ij_coords" {
-                                    todo!();
+                                    return Err(GerberError::SemanticError(
+                                        "IJ coordinates not yet implemented.".to_string()
+                                    ).into());
                                 }
                             }
                         }
 
-                        commands.push(D01(op));
+                        commands.push(Command::D01(op));
                     },
                     Rule::d02 => {
                         let mut arguments = pair.clone().into_inner();
@@ -207,15 +275,23 @@ impl Gerber {
                             let mut coord_args = new_pair.clone().into_inner();
 
                             if let Some(coord_pair) = coord_args.next() {
+                                let coord_str = coord_pair.as_span().as_str();
+
                                 if pair_str == "x_coord" {
-                                    op.x = Some(coord_pair.as_span().as_str().parse().expect("Expected an integer."));
+                                    op.x = Some(coord_str.parse()
+                                        .map_err(|_| GerberError::SemanticError(
+                                            format!("X coordinate '{}' could not be parsed as a number.", coord_str)
+                                        ))?);
                                 } else if pair_str == "y_coord" {
-                                    op.y = Some(coord_pair.as_span().as_str().parse().expect("Expected an integer."));
+                                    op.y = Some(coord_str.parse()
+                                        .map_err(|_| GerberError::SemanticError(
+                                            format!("Y coordinate '{}' could not be parsed as a number.", coord_str)
+                                        ))?);
                                 }
                             }
                         }
 
-                        commands.push(D02(op));
+                        commands.push(Command::D02(op));
                     },
                     Rule::d03 => {
                         let mut arguments = pair.clone().into_inner();
@@ -229,69 +305,97 @@ impl Gerber {
                             let mut coord_args = new_pair.clone().into_inner();
 
                             if let Some(coord_pair) = coord_args.next() {
+                                let coord_str = coord_pair.as_span().as_str();
+
                                 if pair_str == "x_coord" {
-                                    op.x = Some(coord_pair.as_span().as_str().parse().expect("Expected an integer."));
+                                    op.x = Some(coord_str.parse()
+                                        .map_err(|_| GerberError::SemanticError(
+                                            format!("X coordinate '{}' could not be parsed as a number.", coord_str)
+                                        ))?);
                                 } else if pair_str == "y_coord" {
-                                    op.y = Some(coord_pair.as_span().as_str().parse().expect("Expected an integer."));
+                                    op.y = Some(coord_str.parse()
+                                        .map_err(|_| GerberError::SemanticError(
+                                            format!("Y coordinate '{}' could not be parsed as a number.", coord_str)
+                                        ))?);
                                 }
                             }
                         }
 
-                        commands.push(D03(op));
+                        commands.push(Command::D03(op));
                     },
                     Rule::lp => {
                         let mut arguments = pair.clone().into_inner();
-                        let mut polarity = Polarity::Dark;
 
-                        if let Some(polarity_pair) = arguments.next() {
-                            let polarity_str = polarity_pair.as_span().as_str();
-                            polarity = match polarity_str.to_uppercase().as_str() {
-                                "D" => Polarity::Dark,
-                                "C" => Polarity::Clear,
-                                _ => {
-                                    panic!("Unrecognized unit: {}", polarity_str);
-                                }
-                            };
-                        }
+                        let polarity_pair = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "Missing polarity in LP command.".to_string()
+                            ))?;
 
-                        commands.push(LP(polarity));
+                        let polarity_str = polarity_pair.as_span().as_str();
+                        let polarity = match polarity_str.to_uppercase().as_str() {
+                            "D" => Polarity::Dark,
+                            "C" => Polarity::Clear,
+                            _ => {
+                                return Err(GerberError::SemanticError(
+                                    format!("Unrecognized polarity: {}", polarity_str)
+                                ).into());
+                            }
+                        };
+
+                        commands.push(Command::LP(polarity));
                     },
                     Rule::lm => {
                         let mut arguments = pair.clone().into_inner();
-                        let mut mirroring = Mirroring::None;
 
-                        if let Some(mirroring_pair) = arguments.next() {
-                            let mirroring_str = mirroring_pair.as_span().as_str();
-                            mirroring = match mirroring_str.to_uppercase().as_str() {
-                                "N" => Mirroring::None,
-                                "X" => Mirroring::X,
-                                "Y" => Mirroring::Y,
-                                "XY" => Mirroring::XY,
-                                _ => {
-                                    panic!("Unrecognized unit: {}", mirroring_str);
-                                }
-                            };
-                        }
+                        let mirroring_pair = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "Missing mirroring parameter in LM command.".to_string()
+                            ))?;
 
-                        commands.push(LM(mirroring));
+                        let mirroring_str = mirroring_pair.as_span().as_str();
+                        let mirroring = match mirroring_str.to_uppercase().as_str() {
+                            "N" => Mirroring::None,
+                            "X" => Mirroring::X,
+                            "Y" => Mirroring::Y,
+                            "XY" => Mirroring::XY,
+                            _ => {
+                                return Err(GerberError::SemanticError(
+                                    format!("Unrecognized mirroring parameter: {}", mirroring_str)
+                                ).into());
+                            }
+                        };
+
+                        commands.push(Command::LM(mirroring));
                     },
                     Rule::lr => {
                         let mut arguments = pair.clone().into_inner();
-                        let mut rotation_angle = 0.0;
 
-                        if let Some(rotation_pair) = arguments.next() {
-                            rotation_angle =  rotation_pair.as_span().as_str().parse().expect("Expected an double.");
-                        }
+                        let rotation_pair = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "Missing rotation angle in LR command.".to_string()
+                            ))?;
+
+                        let rotation_str = rotation_pair.as_span().as_str();
+                        let rotation_angle = rotation_str.parse()
+                            .map_err(|_| GerberError::SemanticError(
+                                format!("Rotation angle '{}' could not be parsed as a number.", rotation_str)
+                            ))?;
 
                         commands.push(Command::LR(rotation_angle));
                     },
                     Rule::ls => {
                         let mut arguments = pair.clone().into_inner();
-                        let mut scaling_factor = 0.0;
 
-                        if let Some(sf_pair) = arguments.next() {
-                            scaling_factor =  sf_pair.as_span().as_str().parse().expect("Expected an double.");
-                        }
+                        let sf_pair = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "Missing scaling factor in LS command.".to_string()
+                            ))?;
+
+                        let sf_str = sf_pair.as_span().as_str();
+                        let scaling_factor = sf_str.parse()
+                            .map_err(|_| GerberError::SemanticError(
+                                format!("Scaling factor '{}' could not be parsed as a number.", sf_str)
+                            ))?;
 
                         commands.push(Command::LS(scaling_factor));
                     },
@@ -305,12 +409,14 @@ impl Gerber {
                     Rule::sr_statement => {},
                     Rule::tf => {
                         let mut arguments = pair.clone().into_inner();
-                        let mut attribute_name: String = String::new();
-                        let mut attribute_value:Vec<String> = vec![];
+                        let mut attribute_value: Vec<String> = vec![];
 
-                        if let Some(attribute_name_pair) = arguments.next() {
-                            attribute_name = attribute_name_pair.as_span().as_str().to_string();
-                        }
+                        let attribute_name_pair = arguments.next()
+                            .ok_or_else(|| GerberError::SemanticError(
+                                "Missing attribute name in TF command.".to_string()
+                            ))?;
+
+                        let attribute_name = attribute_name_pair.as_span().as_str().to_string();
 
                         while let Some(new_value_pair) = arguments.next() {
                             attribute_value.push(new_value_pair.as_span().as_str().to_string());
@@ -327,6 +433,8 @@ impl Gerber {
                     _ => {}
                 }
             }
+        } else {
+            return Err(GerberError::SemanticError("Empty Gerber file.".to_string()).into());
         }
 
         Ok(Gerber { commands })
