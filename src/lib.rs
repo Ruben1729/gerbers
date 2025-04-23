@@ -8,7 +8,8 @@ use pest::Parser;
 use pest_derive::Parser;
 /// Re-export commonly used types for convenience
 pub use command::Command;
-use crate::command::ApertureTemplate;
+use crate::command::{ApertureDefinition, ApertureTemplate, D01Operation, D02Operation, D03Operation, FormatSpecification, Mirroring, Polarity};
+use crate::Command::{D01, D02, D03, G04, LM, LP};
 
 #[derive(Parser)]
 #[grammar = "gerber.pest"]
@@ -32,232 +33,303 @@ impl Gerber {
     /// * `Result<Self, Box<dyn std::error::Error>>` - The parsed Gerber data or an error
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn error::Error>> {
         let content = fs::read_to_string(path)?;
-
-        let pairs = GerberParser::parse(Rule::gerber_file, &content)?;
-
+        let mut pairs = GerberParser::parse(Rule::gerber_file, &content)?;
         let mut commands = Vec::new();
 
-        // Process all pairs recursively
-        for pair in pairs {
-            process_rule(&mut commands, pair);
+        if let Some(root) = pairs.next() {
+            for pair in root.into_inner() {
+                match pair.as_rule() {
+                    Rule::g04 => {
+                        let mut arguments = pair.clone().into_inner();
+
+                        if let Some(comment) = arguments.next() {
+                            commands.push(G04(comment.as_span().as_str().to_string()));
+                        } else {
+                            panic!("No comment was detected for G04.");
+                        }
+
+                        if !arguments.next().is_none() {
+                            panic!("Unable to parse properly.")
+                        }
+                    },
+                    Rule::mo => {
+                        let mut arguments = pair.clone().into_inner();
+
+                        if let Some(units) = arguments.next() {
+                            let unit_str = units.as_span().as_str();
+                            let unit = match unit_str.to_uppercase().as_str() {
+                                "MM" => command::Unit::Millimeters,
+                                "IN" => command::Unit::Inches,
+                                _ => {
+                                    panic!("Unrecognized unit: {}", unit_str);
+                                }
+                            };
+
+                            commands.push(Command::MO(unit));
+                        } else {
+                            panic!("No comment was detected for G04.");
+                        }
+
+                        if !arguments.next().is_none() {
+                            panic!("Unable to parse properly.")
+                        }
+                    },
+                    Rule::fs => {
+                        let mut arguments = pair.clone().into_inner();
+                        let mut format_spec = FormatSpecification {
+                            x_integer_digits: 0,
+                            x_decimal_digits: 0,
+                            y_integer_digits: 0,
+                            y_decimal_digits: 0,
+                        };
+
+                        if let Some(x_int_digits) =  arguments.next() {
+                            format_spec.x_integer_digits = x_int_digits.as_span().as_str().parse().expect("Integer digits could not be parsed");
+                        } else {
+                            panic!("No comment was detected for G04.");
+                        }
+
+                        if let Some(x_dec_digits) =  arguments.next() {
+                            format_spec.x_decimal_digits = x_dec_digits.as_span().as_str().parse().expect("Integer digits could not be parsed");
+                        } else {
+                            panic!("No comment was detected for G04.");
+                        }
+
+                        if let Some(y_int_digits) = arguments.next() {
+                            format_spec.y_integer_digits = y_int_digits.as_span().as_str().parse().expect("Integer digits could not be parsed");
+                        } else {
+                            panic!("No comment was detected for G04.");
+                        }
+
+                        if let Some(y_dec_digits) =  arguments.next() {
+                            format_spec.y_decimal_digits = y_dec_digits.as_span().as_str().parse().expect("Integer digits could not be parsed");
+                        } else {
+                            panic!("No comment was detected for G04.");
+                        }
+
+                        if !arguments.next().is_none() {
+                            panic!("Unable to parse properly.")
+                        }
+                        commands.push(Command::FS(format_spec));
+                    },
+                    Rule::ad => {
+                        let mut aperture_definition = ApertureDefinition {
+                            code: 0,
+                            template: ApertureTemplate::Circle(0.0, None)
+                        };
+
+                        let mut arguments = pair.clone().into_inner();
+
+                        if let Some(pair) = arguments.next() {
+                            let ap_str = pair.as_span().as_str();
+                            aperture_definition.code = ap_str.trim_start_matches('D').parse::<u32>().expect("Expected an integer.");
+                        }
+
+                        if let Some(pair) = arguments.next() {
+                            let pair_str = format!("{:?}", pair.as_rule());
+                            if pair_str == "template_circle" {
+                                let mut diameter = 0.0;
+                                let mut optional_hole: Option<f64> = None;
+                                let mut circle_arguments = pair.clone().into_inner();
+                                if let Some(diameter_pair) = circle_arguments.next() {
+                                    diameter = diameter_pair.as_span().as_str().parse().expect("Expected an double.");
+                                }
+
+                                if let Some(option_pair) = circle_arguments.next() {
+                                    optional_hole =  Some(option_pair.as_span().as_str().parse().expect("Expected an double."));
+                                }
+
+                                aperture_definition.template = ApertureTemplate::Circle(diameter, optional_hole);
+                            }
+                        }
+
+                        commands.push(Command::AD(aperture_definition));
+                    },
+                    Rule::am => {},
+                    Rule::dnn => {
+                        let mut aperture_command= 0;
+                        let mut arguments = pair.clone().into_inner();
+
+                        if let Some(pair) = arguments.next() {
+                            let ap_str = pair.as_span().as_str();
+                            aperture_command = ap_str.trim_start_matches('D').parse::<u32>().expect("Expected an integer.");
+                        }
+
+                        commands.push(Command::Dnn(aperture_command));
+                    },
+                    Rule::g01 => {
+                        commands.push(Command::G01);
+                    },
+                    Rule::g02 => {
+                        commands.push(Command::G02);
+                    },
+                    Rule::g03 => {
+                        commands.push(Command::G03);
+                    },
+                    Rule::g75 => {
+                        commands.push(Command::G75);
+                    },
+                    Rule::d01 => {
+                        let mut arguments = pair.clone().into_inner();
+                        let mut op = D01Operation {
+                            x: None,
+                            y: None,
+                            i: None,
+                            j: None,
+                        };
+
+                        while let Some(new_pair) = arguments.next() {
+                            let pair_str = format!("{:?}", new_pair.as_rule());
+                            let mut coord_args = new_pair.clone().into_inner();
+
+                            if let Some(coord_pair) = coord_args.next() {
+                                if pair_str == "x_coord" {
+                                    op.x = Some(coord_pair.as_span().as_str().parse().expect("Expected an integer."));
+                                } else if pair_str == "y_coord" {
+                                    op.y = Some(coord_pair.as_span().as_str().parse().expect("Expected an integer."));
+                                } else if pair_str == "ij_coords" {
+                                    todo!();
+                                }
+                            }
+                        }
+
+                        commands.push(D01(op));
+                    },
+                    Rule::d02 => {
+                        let mut arguments = pair.clone().into_inner();
+                        let mut op = D02Operation {
+                            x: None,
+                            y: None,
+                        };
+
+                        while let Some(new_pair) = arguments.next() {
+                            let pair_str = format!("{:?}", new_pair.as_rule());
+                            let mut coord_args = new_pair.clone().into_inner();
+
+                            if let Some(coord_pair) = coord_args.next() {
+                                if pair_str == "x_coord" {
+                                    op.x = Some(coord_pair.as_span().as_str().parse().expect("Expected an integer."));
+                                } else if pair_str == "y_coord" {
+                                    op.y = Some(coord_pair.as_span().as_str().parse().expect("Expected an integer."));
+                                }
+                            }
+                        }
+
+                        commands.push(D02(op));
+                    },
+                    Rule::d03 => {
+                        let mut arguments = pair.clone().into_inner();
+                        let mut op = D03Operation {
+                            x: None,
+                            y: None,
+                        };
+
+                        while let Some(new_pair) = arguments.next() {
+                            let pair_str = format!("{:?}", new_pair.as_rule());
+                            let mut coord_args = new_pair.clone().into_inner();
+
+                            if let Some(coord_pair) = coord_args.next() {
+                                if pair_str == "x_coord" {
+                                    op.x = Some(coord_pair.as_span().as_str().parse().expect("Expected an integer."));
+                                } else if pair_str == "y_coord" {
+                                    op.y = Some(coord_pair.as_span().as_str().parse().expect("Expected an integer."));
+                                }
+                            }
+                        }
+
+                        commands.push(D03(op));
+                    },
+                    Rule::lp => {
+                        let mut arguments = pair.clone().into_inner();
+                        let mut polarity = Polarity::Dark;
+
+                        if let Some(polarity_pair) = arguments.next() {
+                            let polarity_str = polarity_pair.as_span().as_str();
+                            polarity = match polarity_str.to_uppercase().as_str() {
+                                "D" => Polarity::Dark,
+                                "C" => Polarity::Clear,
+                                _ => {
+                                    panic!("Unrecognized unit: {}", polarity_str);
+                                }
+                            };
+                        }
+
+                        commands.push(LP(polarity));
+                    },
+                    Rule::lm => {
+                        let mut arguments = pair.clone().into_inner();
+                        let mut mirroring = Mirroring::None;
+
+                        if let Some(mirroring_pair) = arguments.next() {
+                            let mirroring_str = mirroring_pair.as_span().as_str();
+                            mirroring = match mirroring_str.to_uppercase().as_str() {
+                                "N" => Mirroring::None,
+                                "X" => Mirroring::X,
+                                "Y" => Mirroring::Y,
+                                "XY" => Mirroring::XY,
+                                _ => {
+                                    panic!("Unrecognized unit: {}", mirroring_str);
+                                }
+                            };
+                        }
+
+                        commands.push(LM(mirroring));
+                    },
+                    Rule::lr => {
+                        let mut arguments = pair.clone().into_inner();
+                        let mut rotation_angle = 0.0;
+
+                        if let Some(rotation_pair) = arguments.next() {
+                            rotation_angle =  rotation_pair.as_span().as_str().parse().expect("Expected an double.");
+                        }
+
+                        commands.push(Command::LR(rotation_angle));
+                    },
+                    Rule::ls => {
+                        let mut arguments = pair.clone().into_inner();
+                        let mut scaling_factor = 0.0;
+
+                        if let Some(sf_pair) = arguments.next() {
+                            scaling_factor =  sf_pair.as_span().as_str().parse().expect("Expected an double.");
+                        }
+
+                        commands.push(Command::LS(scaling_factor));
+                    },
+                    Rule::g36 => {
+                        commands.push(Command::G36);
+                    },
+                    Rule::g37 => {
+                        commands.push(Command::G37);
+                    },
+                    Rule::ab_statement => {},
+                    Rule::sr_statement => {},
+                    Rule::tf => {
+                        let mut arguments = pair.clone().into_inner();
+                        let mut attribute_name: String = String::new();
+                        let mut attribute_value:Vec<String> = vec![];
+
+                        if let Some(attribute_name_pair) = arguments.next() {
+                            attribute_name = attribute_name_pair.as_span().as_str().to_string();
+                        }
+
+                        while let Some(new_value_pair) = arguments.next() {
+                            attribute_value.push(new_value_pair.as_span().as_str().to_string());
+                        }
+
+                        commands.push(Command::TF(attribute_name, attribute_value));
+                    },
+                    Rule::ta => {},
+                    Rule::to => {},
+                    Rule::td => {},
+                    Rule::m02 => {
+                        commands.push(Command::M02);
+                    },
+                    _ => {}
+                }
+            }
         }
 
         Ok(Gerber { commands })
-    }
-}
-
-/// Process a rule from the parsed Gerber file and add commands to the vector
-fn process_rule(commands: &mut Vec<Command>, pair: Pair<Rule>) {
-    // Process the current rule
-    match pair.as_rule() {
-        Rule::g04 => {
-            // Comment command
-            let comment = pair.as_str();
-            if comment.starts_with("G04 ") {
-                // Extract the comment text without the G04 prefix and * suffix
-                let comment_text = &comment[4..comment.len()-1];
-                commands.push(Command::G04(comment_text.to_string()));
-            }
-        },
-        Rule::mo => {
-            // Mode (units) command
-            let mo_str = pair.as_str();
-            if mo_str.contains("MM") {
-                commands.push(Command::MO(command::Unit::Millimeters));
-            } else if mo_str.contains("IN") {
-                commands.push(Command::MO(command::Unit::Inches));
-            }
-        },
-        Rule::fs => {
-            // Format specification command
-            // A simplified implementation - in a real parser you'd extract the actual digits
-            commands.push(Command::FS(command::FormatSpecification {
-                x_integer_digits: 3,
-                x_decimal_digits: 6,
-                y_integer_digits: 3,
-                y_decimal_digits: 6,
-            }));
-        },
-        Rule::ad => {
-            // Get the inner parts of the AD command
-            let mut inner_rules = pair.clone().into_inner();
-
-            // Extract the aperture identifier (D code)
-            let aperture_id = inner_rules
-                .find(|p| p.as_rule() == Rule::aperture_identifier)
-                .expect("AD should contain an aperture_identifier");
-
-            // Parse the D code number
-            let code = aperture_id.as_str()[1..].parse::<u32>()
-                .expect("Failed to parse aperture D-code");
-
-            // Find the template type (C, R, O, P, or macro name)
-            let template_part = inner_rules.find(|p| {
-                matches!(p.as_rule(), Rule::decimal | Rule::name)
-            });
-
-            // Default template (will be replaced based on parsed values)
-            let mut template = None;
-
-            // Process the aperture template
-            if let Some(first_part) = template_part {
-                match first_part.as_str() {
-                    "C" => {
-                        // Circle aperture
-                        let mut params = inner_rules
-                            .filter(|p| p.as_rule() == Rule::decimal)
-                            .map(|p| p.as_str().parse::<f64>().unwrap());
-
-                        let diameter = params.next().expect("Circle requires a diameter");
-                        let hole_diameter = params.next();
-
-                        template = Some(ApertureTemplate::Circle(diameter, hole_diameter));
-                    },
-                    "R" => {
-                        // Rectangle aperture
-                        let mut params = inner_rules
-                            .filter(|p| p.as_rule() == Rule::decimal)
-                            .map(|p| p.as_str().parse::<f64>().unwrap());
-
-                        let x_size = params.next().expect("Rectangle requires x-size");
-                        let y_size = params.next().expect("Rectangle requires y-size");
-                        let hole_diameter = params.next();
-
-                        template = Some(ApertureTemplate::Rectangle(x_size, y_size, hole_diameter));
-                    },
-                    "O" => {
-                        // Obround aperture
-                        let mut params = inner_rules
-                            .filter(|p| p.as_rule() == Rule::decimal)
-                            .map(|p| p.as_str().parse::<f64>().unwrap());
-
-                        let x_size = params.next().expect("Obround requires x-size");
-                        let y_size = params.next().expect("Obround requires y-size");
-                        let hole_diameter = params.next();
-
-                        template = Some(ApertureTemplate::Obround(x_size, y_size, hole_diameter));
-                    },
-                    "P" => {
-                        // Polygon aperture
-                        let mut params = inner_rules
-                            .filter(|p| p.as_rule() == Rule::decimal)
-                            .map(|p| p.as_str().parse::<f64>().unwrap());
-
-                        let diameter = params.next().expect("Polygon requires diameter");
-                        let vertices = params.next().expect("Polygon requires vertices") as u32;
-                        let rotation = params.next();
-                        let hole_diameter = params.next();
-
-                        template = Some(ApertureTemplate::Polygon(diameter, vertices, rotation, hole_diameter));
-                    },
-                    macro_name => {
-                        // Macro aperture
-                        let parameters = inner_rules
-                            .filter(|p| p.as_rule() == Rule::decimal)
-                            .map(|p| p.as_str().parse::<f64>().unwrap())
-                            .collect();
-
-                        template = Some(ApertureTemplate::Macro(macro_name.to_string(), parameters));
-                    }
-                }
-            }
-
-            if let Some(template) = template {
-                commands.push(Command::AD(command::ApertureDefinition {
-                    code,
-                    template,
-                }));
-            } else {
-                // Handle error: couldn't determine aperture template
-                eprintln!("Error: couldn't determine aperture template for AD command");
-            }
-        },
-        Rule::dnn => {
-            // Get the aperture_identifier from inside the dnn rule
-            let aperture_id = pair.clone().into_inner()
-                .find(|p| p.as_rule() == Rule::aperture_identifier)
-                .expect("dnn should contain an aperture_identifier");
-
-            // Extract the text of the aperture_identifier (e.g., "D10")
-            let aperture_text = aperture_id.as_str();
-
-            // Remove the 'D' prefix and parse the remaining digits as u32
-            let d_code = aperture_text[1..].parse::<u32>()
-                .expect("Failed to parse D-code number");
-
-            // Push the Dnn command with the extracted number
-            commands.push(Command::Dnn(d_code));
-        },
-        Rule::d01 => {
-            // D01 draw command
-            commands.push(Command::D01(command::D01Operation {
-                x: None,
-                y: None,
-                i: None,
-                j: None,
-            }));
-        },
-        Rule::d02 => {
-            // D02 move command
-            commands.push(Command::D02(command::D02Operation {
-                x: None,
-                y: None,
-            }));
-        },
-        Rule::d03 => {
-            // D03 flash command
-            commands.push(Command::D03(command::D03Operation {
-                x: None,
-                y: None,
-            }));
-        },
-        Rule::g01 => {
-            // G01 linear plotting mode
-            commands.push(Command::G01);
-        },
-        Rule::g02 => {
-            // G02 clockwise circular plotting
-            commands.push(Command::G02);
-        },
-        Rule::g03 => {
-            // G03 counterclockwise circular plotting
-            commands.push(Command::G03);
-        },
-        Rule::g36 => {
-            // G36 begin region
-            commands.push(Command::G36);
-        },
-        Rule::g37 => {
-            // G37 end region
-            commands.push(Command::G37);
-        },
-        Rule::g75 => {
-            // G75 multi-quadrant mode
-            commands.push(Command::G75);
-        },
-        Rule::tf => {
-            commands.push(Command::TF("Test".to_string(), vec![]))
-        },
-        Rule::lp => {
-            // LP load polarity
-            let lp_str = pair.as_str();
-            if lp_str.contains("C") {
-                commands.push(Command::LP(command::Polarity::Clear));
-            } else {
-                commands.push(Command::LP(command::Polarity::Dark));
-            }
-        },
-        Rule::m02 => {
-            // M02 end-of-file
-            commands.push(Command::M02);
-        },
-        // For other rules, we don't handle them directly, but we still need to process their inner pairs
-        _ => {}
-    }
-
-    // Recursively process all inner pairs
-    for inner_pair in pair.into_inner() {
-        process_rule(commands, inner_pair);
     }
 }
 

@@ -36,9 +36,12 @@ statement = _{
 // Graphics commands
 g04 = { "G04" ~ string ~ "*" }
 
-mo = { "%MO" ~ ("MM" | "IN") ~ "*%" }
-fs = { "%FS" ~ "LA" ~ "X" ~ coordinate_digits ~ "Y" ~ coordinate_digits ~ "*%" }
-coordinate_digits = { '0'..'6' ~ '0'..'6' }
+mo = { "%MO" ~ mo_units ~ "*%" }
+mo_units = { ("MM" | "IN") }
+
+fs = { "%FS" ~ "LA" ~ "X" ~ integer_digits ~ decimal_digits ~ "Y" ~ integer_digits ~ decimal_digits ~ "*%" }
+integer_digits = { '0' .. '6' }
+decimal_digits = { '0' .. '6' }
 
 g01 = { "G01*" }
 g02 = { "G02*" }
@@ -48,14 +51,21 @@ g75 = { "G75*" }
 ad = { "%AD" ~
     aperture_identifier ~
     (
-        ("C" ~ "," ~ decimal ~ ("X" ~ decimal)?) |
-        ("R" ~ "," ~ decimal ~ "X" ~ decimal ~ ("X" ~ decimal)?) |
-        ("O" ~ "," ~ decimal ~ "X" ~ decimal ~ ("X" ~ decimal)?) |
-        ("P" ~ "," ~ decimal ~ "X" ~ decimal ~ ("X" ~ decimal ~ ("X" ~ decimal)?)?) |
-        (name ~ ("," ~ decimal ~ ("X" ~ decimal)*)?)
-    ) ~
+        (template_circle) |
+        (template_rectangle) |
+        (template_obround) |
+        (template_polygon) |
+        (template_name)
+    )
+    ~
     "*%"
 }
+
+template_circle = { "C" ~ "," ~ decimal ~ ("X" ~ decimal)? }
+template_rectangle = { "R" ~ "," ~ decimal ~ "X" ~ decimal ~ ("X" ~ decimal)? }
+template_obround = { "O" ~ "," ~ decimal ~ "X" ~ decimal ~ ("X" ~ decimal)? }
+template_polygon = { "P" ~ "," ~ decimal ~ "X" ~ decimal ~ ("X" ~ decimal ~ ("X" ~ decimal)?)? }
+template_name = { name ~ ("," ~ decimal ~ ("X" ~ decimal)*)? }
 
 am = { "%AM" ~ name ~ "*" ~ macro_body ~ "%" }
 macro_body = { (primitive | variable_definition)+ }
@@ -81,12 +91,20 @@ factor = {
 
 dnn = { aperture_identifier ~ "*" }
 
-d01 = { ("X" ~ integer)? ~ ("Y" ~ integer)? ~ ("I" ~ integer ~ "J" ~ integer)? ~ "D01*" }
-d02 = { ("X" ~ integer)? ~ ("Y" ~ integer)? ~ "D02*" }
-d03 = { ("X" ~ integer)? ~ ("Y" ~ integer)? ~ "D03*" }
+d01 = { x_coord? ~ y_coord? ~ ij_coords? ~ "D01*" }
+d02 = { x_coord? ~ y_coord? ~ "D02*" }
+d03 = { x_coord? ~ y_coord? ~ "D03*" }
 
-lp = { "%LP" ~ ("C" | "D") ~ "*%" }
-lm = { "%LM" ~ ("N" | "XY" | "Y" | "X") ~ "*%" }
+x_coord = { "X" ~ integer }
+y_coord = { "Y" ~ integer }
+ij_coords = { "I" ~ integer ~ "J" ~ integer }
+
+lp = { "%LP" ~ polarity ~ "*%" }
+polarity = { "C" | "D" }
+
+lm = { "%LM" ~ mirroring ~ "*%" }
+mirroring = { "N" | "XY" | "Y" | "X" }
+
 lr = { "%LR" ~ decimal ~ "*%" }
 ls = { "%LS" ~ decimal ~ "*%" }
 
