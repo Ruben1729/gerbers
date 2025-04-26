@@ -9,7 +9,7 @@
 //!
 //! ## Format Version
 //!
-//! This implementation is compliant with the Gerber Format Specification version 2022.02.
+//! This implementation is compliant with the Gerber Format Specification version 2024.05.
 
 /// Represents a Gerber format command.
 ///

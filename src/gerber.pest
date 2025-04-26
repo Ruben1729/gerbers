@@ -110,7 +110,7 @@ ls = { "%LS" ~ decimal ~ "*%" }
 
 m02 = { "M02*" }
 
-region_statement = { g36 ~ contour+ ~ g37 }
+region_statement = { g36 ~ contour* ~ g37 }
 contour = { d02 ~ (d01 | g01 | g02 | g03)* }
 g36 = { "G36*" }
 g37 = { "G37*" }
