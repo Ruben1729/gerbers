@@ -3,6 +3,7 @@ pub mod command;
 
 use std::fs;
 use std::path::Path;
+use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
 
@@ -325,7 +326,105 @@ impl Gerber {
 
                 commands.push(Command::AD(aperture_definition));
             },
-            Rule::am => {},
+            Rule::am => {
+                let mut arguments = pair.clone().into_inner();
+                let mut name = String::new();
+                let mut primitives = Vec::new();
+
+                if let Some(name_pair) = arguments.next() {
+                    name = name_pair.as_span().as_str().to_string();
+                }
+
+                while let Some(macro_body_pair) = arguments.next() {
+                    let macro_str = format!("{:?}", macro_body_pair.as_rule());
+                    if macro_str == "primitive_comment" {
+                        let mut inner = macro_body_pair.into_inner();
+                        if let Some(comment) = inner.next() {
+                            let comment_str = comment.as_span().as_str().to_string();
+                            primitives.push(command::AMPrimitive::Comment(comment_str));
+                        }
+                    } else if macro_str == "primitive_circle" {
+                        let mut inner = macro_body_pair.into_inner();
+                        let exposure = parse_bool(inner.next());
+                        let diameter = parse_f64(inner.next());
+                        let center_x = parse_f64(inner.next());
+                        let center_y = parse_f64(inner.next());
+                        let rotation = if let Some(rot) = inner.next() {
+                            Some(parse_f64_value(rot))
+                        } else {
+                            None
+                        };
+                        primitives.push(command::AMPrimitive::Circle(exposure, diameter, center_x, center_y, rotation));
+                    } else if macro_str == "primitive_vector_line" {
+                        let mut inner = macro_body_pair.into_inner();
+                        let exposure = parse_bool(inner.next());
+                        let width = parse_f64(inner.next());
+                        let start_x = parse_f64(inner.next());
+                        let start_y = parse_f64(inner.next());
+                        let end_x = parse_f64(inner.next());
+                        let end_y = parse_f64(inner.next());
+                        let rotation = parse_f64(inner.next());
+                        primitives.push(command::AMPrimitive::VectorLine(exposure, width, start_x, start_y, end_x, end_y, rotation));
+                    } else if macro_str == "primitive_center_line" {
+                        let mut inner = macro_body_pair.into_inner();
+                        let exposure = parse_bool(inner.next());
+                        let width = parse_f64(inner.next());
+                        let height = parse_f64(inner.next());
+                        let center_x = parse_f64(inner.next());
+                        let center_y = parse_f64(inner.next());
+                        let rotation = parse_f64(inner.next());
+                        primitives.push(command::AMPrimitive::CenterLine(exposure, width, height, center_x, center_y, rotation));
+                    } else if macro_str == "primitive_outline" {
+                        let mut inner = macro_body_pair.into_inner();
+                        let exposure = parse_bool(inner.next());
+                        let mut points = Vec::new();
+
+                        // First point
+                        let x = parse_f64(inner.next());
+                        let y = parse_f64(inner.next());
+                        points.push((x, y));
+
+                        // Remaining points
+                        while let (Some(x_opt), Some(y_opt)) = (inner.next(), inner.next()) {
+                            if inner.clone().count() <= 1 {
+                                // Last parameter is rotation
+                                break;
+                            }
+                            let x = parse_f64_value(x_opt);
+                            let y = parse_f64_value(y_opt);
+                            points.push((x, y));
+                        }
+
+                        let rotation = parse_f64(inner.next());
+                        primitives.push(command::AMPrimitive::Outline(exposure, points, rotation));
+                    } else if macro_str == "primitive_polygon" {
+                        let mut inner = macro_body_pair.into_inner();
+                        let exposure = parse_bool(inner.next());
+                        let vertices = parse_u32(inner.next());
+                        let center_x = parse_f64(inner.next());
+                        let center_y = parse_f64(inner.next());
+                        let diameter = parse_f64(inner.next());
+                        let rotation = parse_f64(inner.next());
+                        primitives.push(command::AMPrimitive::Polygon(exposure, vertices, center_x, center_y, diameter, rotation));
+                    } else if macro_str == "primitive_thermal" {
+                        let mut inner = macro_body_pair.into_inner();
+                        let center_x = parse_f64(inner.next());
+                        let center_y = parse_f64(inner.next());
+                        let outer_diameter = parse_f64(inner.next());
+                        let inner_diameter = parse_f64(inner.next());
+                        let gap = parse_f64(inner.next());
+                        let rotation = parse_f64(inner.next());
+                        primitives.push(command::AMPrimitive::Thermal(center_x, center_y, outer_diameter, inner_diameter, gap, rotation));
+                    } else if macro_str == "variable_definition" {
+                        let mut inner = macro_body_pair.into_inner();
+                        let var_num = parse_u32(inner.next());
+                        let expression = inner.next().map_or(String::new(), |expr| expr.as_span().as_str().to_string());
+                        primitives.push(command::AMPrimitive::VariableDefinition(var_num, expression));
+                    }
+                }
+
+                commands.push(Command::AM(name, primitives));
+            },
             Rule::dnn => {
                 let mut arguments = pair.clone().into_inner();
 
@@ -591,6 +690,22 @@ impl Gerber {
         }
         Ok(())
     }
+}
+
+fn parse_bool(opt: Option<Pair<Rule>>) -> bool {
+    opt.map_or(false, |p| p.as_span().as_str().parse::<i32>().unwrap_or(0) != 0)
+}
+
+fn parse_f64(opt: Option<Pair<Rule>>) -> f64 {
+    opt.map_or(0.0, |p| parse_f64_value(p))
+}
+
+fn parse_f64_value(pair: Pair<Rule>) -> f64 {
+    pair.as_span().as_str().parse::<f64>().unwrap_or(0.0)
+}
+
+fn parse_u32(opt: Option<Pair<Rule>>) -> u32 {
+    opt.map_or(0, |p| p.as_span().as_str().parse::<u32>().unwrap_or(0))
 }
 
 /// Core error types used throughout the library

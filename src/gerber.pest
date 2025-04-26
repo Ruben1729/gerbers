@@ -67,18 +67,23 @@ template_obround = { "O" ~ "," ~ decimal ~ "X" ~ decimal ~ ("X" ~ decimal)? }
 template_polygon = { "P" ~ "," ~ decimal ~ "X" ~ decimal ~ ("X" ~ decimal ~ ("X" ~ decimal)?)? }
 template_name = { name ~ ("," ~ decimal ~ ("X" ~ decimal)*)? }
 
-am = { "%AM" ~ name ~ "*" ~ macro_body ~ "%" }
-macro_body = { (primitive | variable_definition)+ }
+am = { "%AM" ~ name ~ "*" ~ (primitive_comment |
+                            primitive_circle |
+                            primitive_vector_line |
+                            primitive_center_line |
+                            primitive_outline |
+                            primitive_polygon |
+                            primitive_thermal |
+                            variable_definition)+ ~ "%" }
 variable_definition = { macro_variable ~ "=" ~ expr ~ "*" }
-primitive = {
-    ("0" ~ string ~ "*") |
-    ("1" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ ("," ~ expr)? ~ "*") |
-    ("20" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "*") |
-    ("21" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "*") |
-    ("4" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ ("," ~ expr ~ "," ~ expr)+ ~ "," ~ expr ~ "*") |
-    ("5" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "*") |
-    ("7" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "*")
-}
+
+primitive_comment = { "0" ~ string ~ "*" }
+primitive_circle = { "1" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ ("," ~ expr)? ~ "*" }
+primitive_vector_line = { "20" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "*" }
+primitive_center_line = { "21" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "*" }
+primitive_outline = { "4" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ ("," ~ expr ~ "," ~ expr)+ ~ "," ~ expr ~ "*" }
+primitive_polygon = { "5" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "*" }
+primitive_thermal = { "7" ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "," ~ expr ~ "*" }
 
 macro_variable = @{ "$" ~ ASCII_DIGIT* ~ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
 expr = { term ~ (("+" | "-") ~ term)* }
