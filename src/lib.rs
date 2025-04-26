@@ -1,5 +1,6 @@
 /// Module containing the Gerber command definitions and related types
 pub mod command;
+pub mod visualizer;
 
 use std::fs;
 use std::path::Path;

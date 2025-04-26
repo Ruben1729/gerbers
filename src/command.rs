@@ -16,7 +16,7 @@
 /// Each variant corresponds to a specific command in the Gerber format specification.
 /// Commands control various aspects of the Gerber image generation, including
 /// aperture definitions, coordinate format, plotting operations, and attributes.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Command {
     /// Comment command (G04).
     ///
@@ -158,7 +158,7 @@ pub enum Command {
 /// Represents the unit of measurement in a Gerber file.
 ///
 /// Set by the MO command.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 pub enum Unit {
     /// Millimeters (metric) - set by `%MOMM*%`
     Millimeters,
@@ -183,7 +183,7 @@ impl FromStr for Unit {
 /// Specifies the format for coordinate data.
 ///
 /// Set by the FS command.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct FormatSpecification {
     /// Number of integer digits for X coordinates
     pub x_integer_digits: u8,
@@ -198,7 +198,7 @@ pub struct FormatSpecification {
 /// Defines an aperture with its D-code and template.
 ///
 /// Created by the AD command.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ApertureDefinition {
     /// The aperture number (D code ≥ 10)
     pub code: u32,
@@ -210,7 +210,7 @@ pub struct ApertureDefinition {
 ///
 /// Standard apertures are predefined shapes (C, R, O, P),
 /// while macro apertures are custom shapes defined with the AM command.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ApertureTemplate {
     /// Circle aperture (C).
     ///
@@ -242,7 +242,7 @@ pub enum ApertureTemplate {
 ///
 /// Each primitive is a basic shape that can be combined to create
 /// complex aperture definitions.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum AMPrimitive {
     /// Comment primitive (Code 0).
     ///
@@ -288,7 +288,7 @@ pub enum AMPrimitive {
 /// Represents the parameters for a D01 (plot) operation.
 ///
 /// D01 operations create draw or arc objects depending on the current plot mode.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct D01Operation {
     /// X coordinate (optional, uses current point if not specified)
     pub x: Option<i32>,
@@ -303,7 +303,7 @@ pub struct D01Operation {
 /// Represents the parameters for a D02 (move) operation.
 ///
 /// D02 operations move the current point without drawing.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct D02Operation {
     /// X coordinate (optional, uses current point if not specified)
     pub x: Option<i32>,
@@ -314,7 +314,7 @@ pub struct D02Operation {
 /// Represents the parameters for a D03 (flash) operation.
 ///
 /// D03 operations create a flash of the current aperture.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct D03Operation {
     /// X coordinate (optional, uses current point if not specified)
     pub x: Option<i32>,
@@ -325,7 +325,7 @@ pub struct D03Operation {
 /// Represents the polarity setting for graphical objects.
 ///
 /// Set by the LP command.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Polarity {
     /// Dark polarity - objects darken the image plane (LPD)
     Dark,
@@ -336,7 +336,7 @@ pub enum Polarity {
 /// Represents mirroring settings for graphical objects.
 ///
 /// Set by the LM command.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Mirroring {
     /// No mirroring (LMN)
     None,
@@ -351,7 +351,7 @@ pub enum Mirroring {
 /// Represents the parameters for a Step and Repeat operation.
 ///
 /// Set by the SR command.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct StepAndRepeat {
     /// Number of repeats in the X direction
     pub x_repeats: u32,
