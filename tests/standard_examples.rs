@@ -260,16 +260,16 @@ fn test_non_overlapping_countour() {
     }
 }
 
-// #[test]
-// fn test_polarities_and_apertures() {
-//     // Path to the test file
-//     let test_file = Path::new("tests/polarities_and_apertures.gbr");
-// 
-//     // Parse the Gerber file
-//     let gerber = Gerber::new(test_file).expect("Failed to parse Gerber file");
-// 
-//     // Verify number of commands
-//     assert!(gerber.commands.len() > 0, "No commands were parsed");
-//     
-//     
-// }
+#[test]
+fn test_polarities_and_apertures() {
+    // Path to the test file
+    let test_file = Path::new("tests/polarities_and_apertures.gbr");
+
+    // Parse the Gerber file
+    let gerber = Gerber::new(test_file).expect("Failed to parse Gerber file");
+
+    // Verify number of commands
+    assert!(gerber.commands.len() > 0, "No commands were parsed");
+    
+    
+}

@@ -1,7 +1,7 @@
 G04 Ucamco ex. 2: Shapes*
 %MOMM*%
 %FSLAX36Y36*%
-%TF.FileFunction,Other,Sample*
+%TF.FileFunction,Other,Sample*%
 G04 Define Apertures*
 %AMTHERMAL80*
 7,0,0,0.800,0.550,0.125,45*%

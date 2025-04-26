@@ -194,6 +194,124 @@ impl Gerber {
                         }
 
                         aperture_definition.template = ApertureTemplate::Circle(diameter, optional_hole);
+                    } else if pair_str == "template_rectangle" {
+                        let mut arguments = template_pair.clone().into_inner();
+                        let mut x = 0.0;
+                        let mut y = 0.0;
+                        let mut hole_diameter = None;
+
+                        // Parse diameter
+                        if let Some(x_pair) = arguments.next() {
+                            x = x_pair.as_span().as_str().parse()
+                                .map_err(|_| GerberError::SemanticError(
+                                    "Rectangle x could not be parsed.".to_string()
+                                ))?;
+                        }
+
+                        if let Some(y_pair) = arguments.next() {
+                            y = y_pair.as_span().as_str().parse()
+                                .map_err(|_| GerberError::SemanticError(
+                                    "Rectangle y could not be parsed.".to_string()
+                                ))?;
+                        }
+
+                        // Parse optional hole
+                        if let Some(hole_pair) = arguments.next() {
+                            hole_diameter = Some(hole_pair.as_span().as_str().parse()
+                                .map_err(|_| GerberError::SemanticError(
+                                    "Rectangle y could not be parsed.".to_string()
+                                ))?);
+                        }
+
+                        aperture_definition.template = ApertureTemplate::Rectangle(x, y, hole_diameter);
+                    } else if pair_str == "template_obround" {
+                        let mut arguments = template_pair.clone().into_inner();
+                        let mut x = 0.0;
+                        let mut y = 0.0;
+                        let mut hole_diameter = None;
+
+                        // Parse diameter
+                        if let Some(x_pair) = arguments.next() {
+                            x = x_pair.as_span().as_str().parse()
+                                .map_err(|_| GerberError::SemanticError(
+                                    "Rectangle x could not be parsed.".to_string()
+                                ))?;
+                        }
+
+                        if let Some(y_pair) = arguments.next() {
+                            y = y_pair.as_span().as_str().parse()
+                                .map_err(|_| GerberError::SemanticError(
+                                    "Rectangle y could not be parsed.".to_string()
+                                ))?;
+                        }
+
+                        // Parse optional hole
+                        if let Some(hole_pair) = arguments.next() {
+                            hole_diameter = Some(hole_pair.as_span().as_str().parse()
+                                .map_err(|_| GerberError::SemanticError(
+                                    "Rectangle y could not be parsed.".to_string()
+                                ))?);
+                        }
+
+                        aperture_definition.template = ApertureTemplate::Obround(x, y, hole_diameter);
+                    } else if pair_str == "template_polygon" {
+                        let mut arguments = template_pair.clone().into_inner();
+                        let mut outer_diameter = 0.0;
+                        let mut vertices = 0;
+                        let mut rotation = None;
+                        let mut hole_diameter = None;
+
+                        // Parse diameter
+                        if let Some(outer_diam_pair) = arguments.next() {
+                            outer_diameter = outer_diam_pair.as_span().as_str().parse()
+                                .map_err(|_| GerberError::SemanticError(
+                                    "Rectangle x could not be parsed.".to_string()
+                                ))?;
+                        }
+
+                        if let Some(vertices_pair) = arguments.next() {
+                            vertices = vertices_pair.as_span().as_str().parse()
+                                .map_err(|_| GerberError::SemanticError(
+                                    "Rectangle y could not be parsed.".to_string()
+                                ))?;
+                        }
+
+                        // Parse optional hole
+                        if let Some(rotation_pair) = arguments.next() {
+                            rotation = Some(rotation_pair.as_span().as_str().parse()
+                                .map_err(|_| GerberError::SemanticError(
+                                    "Rectangle y could not be parsed.".to_string()
+                                ))?);
+                        }
+
+                        if let Some(hole_pair) = arguments.next() {
+                            hole_diameter = Some(hole_pair.as_span().as_str().parse()
+                                .map_err(|_| GerberError::SemanticError(
+                                    "Rectangle y could not be parsed.".to_string()
+                                ))?);
+                        }
+
+                        aperture_definition.template = ApertureTemplate::Polygon(outer_diameter, vertices, rotation, hole_diameter);
+                    } else if pair_str == "template_name" {
+                        let mut arguments = template_pair.clone().into_inner();
+
+                        let mut name = "".to_string();
+                        let mut parameters = vec![];
+
+                        if let Some(name_pair) = arguments.next() {
+                            name = name_pair.as_span().as_str().to_string();
+                        }
+
+                        while let Some(parameter_pair) = arguments.next() {
+                            parameters.push(
+                                parameter_pair.as_span().as_str().parse()
+                                    .map_err(|_| GerberError::SemanticError(
+                                        "Rectangle y could not be parsed.".to_string()
+                                    ))?
+                            );
+                        }
+
+                        aperture_definition.template = ApertureTemplate::Macro(name, parameters);
                     } else {
                         return Err(GerberError::SemanticError(
                             format!("Unsupported aperture template: {}", pair_str)
@@ -264,9 +382,22 @@ impl Gerber {
                                     format!("Y coordinate '{}' could not be parsed as a number.", coord_str)
                                 ))?);
                         } else if pair_str == "ij_coords" {
-                            return Err(GerberError::SemanticError(
-                                "IJ coordinates not yet implemented.".to_string()
-                            ).into());
+                            op.i = Some(coord_str.parse()
+                                .map_err(|_| GerberError::SemanticError(
+                                    format!("Y coordinate '{}' could not be parsed as a number.", coord_str)
+                                ))?);
+
+                            if let Some(j_pair) = coord_args.next() {
+                                op.j = Some(j_pair.as_span().as_str().parse()
+                                    .map_err(|_| GerberError::SemanticError(
+                                        format!("Y coordinate '{}' could not be parsed as a number.", coord_str)
+                                    ))?);
+                            } else {
+                                return Err(GerberError::SemanticError(
+                                    "Missing J parameter.".to_string()
+                                ).into());
+                            }
+
                         }
                     }
                 }
